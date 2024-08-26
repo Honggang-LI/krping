@@ -522,10 +522,20 @@ static int krping_setup_buffers(struct krping_cb *cb)
 	cb->recv_dma_addr = ib_dma_map_single(cb->pd->device,
 				   &cb->recv_buf, 
 				   sizeof(cb->recv_buf), DMA_BIDIRECTIONAL);
+	if (unlikely(ib_dma_mapping_error(cb->pd->device, cb->recv_dma_addr))) {
+		DEBUG_LOG(PFX "recv_buf DMA map failed\n");
+		ret = -EINVAL;
+		goto bail;
+	}
 	dma_unmap_addr_set(cb, recv_mapping, cb->recv_dma_addr);
 	cb->send_dma_addr = ib_dma_map_single(cb->pd->device,
 					   &cb->send_buf, sizeof(cb->send_buf),
 					   DMA_BIDIRECTIONAL);
+	if (unlikely(ib_dma_mapping_error(cb->pd->device, cb->send_dma_addr))) {
+		DEBUG_LOG(PFX "send_buf DMA map failed\n");
+		ret = -EINVAL;
+		goto bail;
+	}
 	dma_unmap_addr_set(cb, send_mapping, cb->send_dma_addr);
 
 	cb->rdma_buf = kzalloc(cb->size, GFP_KERNEL);
@@ -567,6 +577,15 @@ static int krping_setup_buffers(struct krping_cb *cb)
 	DEBUG_LOG(PFX "allocated & registered buffers...\n");
 	return 0;
 bail:
+	if (!unlikely(ib_dma_mapping_error(cb->pd->device, cb->recv_dma_addr)))
+		ib_dma_unmap_single(cb->pd->device,
+			 dma_unmap_addr(cb, recv_mapping),
+			 sizeof(cb->recv_buf), DMA_BIDIRECTIONAL);
+	if (!unlikely(ib_dma_mapping_error(cb->pd->device, cb->send_dma_addr)))
+		ib_dma_unmap_single(cb->pd->device,
+			 dma_unmap_addr(cb, send_mapping),
+			 sizeof(cb->send_buf), DMA_BIDIRECTIONAL);
+
 	if (cb->reg_mr && !IS_ERR(cb->reg_mr))
 		ib_dereg_mr(cb->reg_mr);
 	if (cb->rdma_mr && !IS_ERR(cb->rdma_mr))
