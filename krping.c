@@ -460,7 +460,9 @@ static int krping_accept(struct krping_cb *cb)
 	conn_param.responder_resources = 1;
 	conn_param.initiator_depth = 1;
 
+	rdma_lock_handler(cb->child_cm_id);
 	ret = rdma_accept(cb->child_cm_id, &conn_param);
+	rdma_unlock_handler(cb->child_cm_id);
 	if (ret) {
 		printk(KERN_ERR PFX "rdma_accept error: %d\n", ret);
 		return ret;
